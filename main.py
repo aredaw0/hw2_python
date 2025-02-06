@@ -21,11 +21,11 @@ logging.basicConfig(
 class LoggingMiddleware(BaseMiddleware):
     async def __call__(self, handler, event, data):
         if isinstance(event, Message):
-            logging.info(f"User {event.from_user.id} -> {event.text}")
+            logging.info(f"Получено сообщение от {event.from_user.id}: {event.text}")
         return await handler(event, data)
 
-TOKEN = "7253804796:AAFM_GNF4Fm9-tsSxqBKTVhRmxGwDA2ly1k"
-API_WEATHER = "65adac083380b7ea124d2d5ad616c46c"
+TOKEN = os.environ.get("BOT_TOKEN")
+API_WEATHER = os.environ.get("API_WEATHER_KEY")
 API_FOOD_SEARCH = "https://world.openfoodfacts.org/cgi/search.pl?action=process&search_terms={}&json=true"
 
 bot = Bot(token=TOKEN)
@@ -52,7 +52,6 @@ class LogWorkoutState(StatesGroup):
     type = State()
     duration = State()
 
-
 def calculate_water(weight, activity, temp):
     water = weight * 30 + (activity // 30) * 500
     if temp > 25:
@@ -64,7 +63,6 @@ def calculate_calories(weight, height, age, activity, gender):
         base = 10 * weight + 6.25 * height - 5 * age + 5
     else:
         base = 10 * weight + 6.25 * height - 5 * age - 161
-    
     return base + activity * 5
 
 def workout_calories(weight, duration, intensity):
@@ -102,24 +100,18 @@ async def get_food_info(product_name: str):
             products = data.get("products", [])
             if not products:
                 return None
-            
             first = products[0]
             nutr = first.get("nutriments", {})
-
             name = first.get("product_name", "Неизвестно")
-
             prot = nutr.get("proteins_100g", 0)
             fat = nutr.get("fat_100g", 0)
             carb = nutr.get("carbohydrates_100g", 0)
-
             manual_kcal_100g = 4 * prot + 9 * fat + 4 * carb
             official_kcal_100g = nutr.get("energy-kcal_100g", 0)
-
             if manual_kcal_100g < 1:
                 final_kcal_100g = official_kcal_100g
             else:
                 final_kcal_100g = manual_kcal_100g
-
             return {
                 "name": name,
                 "calories_100g": final_kcal_100g,
@@ -127,7 +119,6 @@ async def get_food_info(product_name: str):
                 "fat_100g": fat,
                 "carbs_100g": carb
             }
-
 
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
@@ -165,7 +156,6 @@ async def profile_gender(message: types.Message, state: FSMContext):
     if gender_text not in ["мужской", "женский"]:
         await message.answer("Укажите 'мужской' или 'женский'.")
         return
-
     await state.update_data(gender=gender_text)
     await message.answer("Сколько минут активности в день?")
     await state.set_state(ProfileState.activity)
@@ -181,16 +171,13 @@ async def profile_city(message: types.Message, state: FSMContext):
     data = await state.get_data()
     user_id = message.from_user.id
     temp = await get_weather(message.text)
-
     weight = data["weight"]
     height = data["height"]
     age = data["age"]
     gender = data["gender"]
     activity = data["activity"]
-
     water_goal = calculate_water(weight, activity, temp)
     calorie_goal = calculate_calories(weight, height, age, activity, gender)
-
     users[user_id] = {
         "weight": weight,
         "height": height,
@@ -204,7 +191,6 @@ async def profile_city(message: types.Message, state: FSMContext):
         "logged_calories": [],
         "burned_calories": 0
     }
-
     await message.answer(
         f"Профиль сохранён!\n"
         f"Вода (цель): {water_goal:.0f} мл\n"
@@ -219,12 +205,10 @@ async def set_calorie_goal_cmd(message: types.Message):
     if user_id not in users:
         await message.answer("Сначала настройте профиль (/set_profile).")
         return
-
     parts = message.text.split()
     if len(parts) < 2:
         await message.answer("Формат: /set_calorie_goal 2000")
         return
-
     try:
         new_goal = float(parts[1])
         users[user_id]["calorie_goal"] = new_goal
@@ -238,7 +222,6 @@ async def log_water(message: types.Message):
     if user_id not in users:
         await message.answer("Сначала настройте профиль (/set_profile).")
         return
-
     try:
         amount = int(message.text.split()[1])
         users[user_id]["logged_water"].append(amount)
@@ -265,7 +248,6 @@ async def process_food_product(message: types.Message, state: FSMContext):
         await message.answer("Информация о продукте не найдена. Попробуйте ещё раз.")
         await state.clear()
         return
-    
     await state.update_data(
         product_name=info["name"],
         calories_100g=info["calories_100g"],
@@ -299,26 +281,20 @@ async def process_food_method(message: types.Message, state: FSMContext):
         await message.answer("Сначала настройте профиль (/set_profile).")
         await state.clear()
         return
-
     data = await state.get_data()
     cooking = message.text.strip().lower()
-
     method_factor = {
         "жареный": 1.20,
         "отварной": 1.00,
         "запечённый": 1.10,
         "-": 1.00
     }.get(cooking, 1.00)
-
     base_cal_100g = data["calories_100g"]
     grams = data["grams"]
-
     base_cal = (base_cal_100g * grams) / 100.0
     final_cal = base_cal * method_factor
-
     users[user_id]["logged_calories"].append(final_cal)
     total_calories = sum(users[user_id]["logged_calories"])
-
     txt = (
         f"Продукт: {data['product_name']}\n"
         f"Вес: {grams:.1f} г\n"
@@ -328,7 +304,6 @@ async def process_food_method(message: types.Message, state: FSMContext):
         f"Суммарно за сегодня: {total_calories:.1f} ккал."
     )
     await message.answer(txt)
-
     cal_goal = users[user_id]["calorie_goal"]
     if total_calories >= 0.8 * cal_goal:
         low_cal_foods = [
@@ -344,7 +319,6 @@ async def process_food_method(message: types.Message, state: FSMContext):
         for item in low_cal_foods:
             rec_text += f"• {item}\n"
         await message.answer(rec_text)
-
     await state.clear()
 
 @dp.message(Command("log_workout"))
@@ -369,16 +343,13 @@ async def process_workout_duration(message: types.Message, state: FSMContext):
         await message.answer("Сначала настройте профиль.")
         await state.clear()
         return
-
     data = await state.get_data()
     try:
         duration = int(message.text)
         c_burned = workout_calories(users[user_id]["weight"], duration, data["type"])
         users[user_id]["burned_calories"] += c_burned
-
         extra_water = (duration // 30) * 200
         users[user_id]["logged_water"].append(extra_water)
-
         await message.answer(
             f"Тренировка: {data['type']}, {duration} мин.\n"
             f"Сожжено: {c_burned:.1f} ккал.\n"
@@ -394,13 +365,11 @@ async def check_progress(message: types.Message):
     if user_id not in users:
         await message.answer("Сначала настройте профиль (/set_profile).")
         return
-
     user = users[user_id]
     total_water = sum(user["logged_water"])
     total_calories = sum(user["logged_calories"])
     burned = user["burned_calories"]
     balance = total_calories - burned
-
     msg = (
         "📊 Прогресс:\n"
         f"Вода: {total_water} мл (цель: {user['water_goal']:.0f} мл)\n"
@@ -416,12 +385,10 @@ async def progress_graphs(message: types.Message):
     if user_id not in users:
         await message.answer("Сначала настройте профиль (/set_profile).")
         return
-
     user = users[user_id]
     if len(user["logged_water"]) < 2 or len(user["logged_calories"]) < 2:
         await message.answer("Недостаточно данных для графиков (нужно хотя бы 2 записи).")
         return
-
     plt.figure(figsize=(8,4))
     plt.plot(user["logged_water"], marker='o', label='Вода (мл)')
     plt.title("Прогресс воды")
@@ -432,7 +399,6 @@ async def progress_graphs(message: types.Message):
     plt.savefig(buf_water, format='png')
     buf_water.seek(0)
     plt.close()
-
     plt.figure(figsize=(8,4))
     plt.plot(user["logged_calories"], marker='o', color='orange', label='Калории (ккал)')
     plt.title("Прогресс калорий")
@@ -443,10 +409,8 @@ async def progress_graphs(message: types.Message):
     plt.savefig(buf_cal, format='png')
     buf_cal.seek(0)
     plt.close()
-
     photo_water = BufferedInputFile(buf_water.getvalue(), filename='water.png')
     photo_cal = BufferedInputFile(buf_cal.getvalue(), filename='calories.png')
-
     await message.answer_photo(photo_water, caption="График потребления воды")
     await message.answer_photo(photo_cal, caption="График потребления калорий")
 
