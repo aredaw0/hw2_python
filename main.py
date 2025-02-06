@@ -24,8 +24,8 @@ class LoggingMiddleware(BaseMiddleware):
             logging.info(f"Получено сообщение от {event.from_user.id}: {event.text}")
         return await handler(event, data)
 
-TOKEN = "7253804796:AAFM_GNF4Fm9-tsSxqBKTVhRmxGwDA2ly1k"
-API_WEATHER = "65adac083380b7ea124d2d5ad616c46c"
+TOKEN = "%"
+API_WEATHER = "%"
 API_FOOD_SEARCH = "https://world.openfoodfacts.org/cgi/search.pl?action=process&search_terms={}&json=true"
 
 bot = Bot(token=TOKEN)
